@@ -6,7 +6,7 @@ from pydantic import BaseModel
 HOST = "127.0.0.1"
 PORT = 5000
 
-GRID_DIMENSION = 256
+GRID_DIMENSION = 128
 
 
 class Point(BaseModel):

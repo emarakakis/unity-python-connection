@@ -23,7 +23,7 @@ public class PythonFrame
 
 public class PythonReceiver : MonoBehaviour
 {
-    private const int GridSize = 256;
+    private const int GridSize = 128;
 
     [SerializeField] private MeshFilter meshFilter;
 
