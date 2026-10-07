@@ -1,0 +1,79 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Asset Store Tools
+[Aa]ssets/AssetStoreTools*
+
+# Visual Studio / VS Code / Rider
+.vs/
+.vscode/
+.idea/
+
+*.csproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Rider
+*.sln.iml
+
+# Unity generated files
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Crash reports
+sysinfo.txt
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Gradle
+.gradle/
+
+# Android
+*.apk
+*.aab
+
+# iOS / Xcode
+*.xcworkspace
+xcuserdata/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# Unity cache
+Library/
+Temp/
+
+# Project-specific generated terrain screenshots
+Assets/TerrainScreenshots/
+Assets/TerrainScreenshots.meta
