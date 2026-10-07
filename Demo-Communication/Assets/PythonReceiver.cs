@@ -23,7 +23,7 @@ public class PythonFrame
 
 public class PythonReceiver : MonoBehaviour
 {
-    private const int GridSize = 128;
+    private const int GridSize = 512;
 
     [SerializeField] private MeshFilter meshFilter;
 
@@ -162,18 +162,18 @@ public class PythonReceiver : MonoBehaviour
         if (!meshDirty)
             return;
 
-        Stopwatch stopwatch = Stopwatch.StartNew();
+        //Stopwatch stopwatch = Stopwatch.StartNew();
 
-        mesh.vertices = vertices;
+        //mesh.vertices = vertices;
 
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
+        //mesh.RecalculateNormals();
+        //mesh.RecalculateBounds();
 
-        stopwatch.Stop();
+        //stopwatch.Stop();
 
-        UnityEngine.Debug.Log(
-                $"Mesh Processing Ticks: {stopwatch.ElapsedTicks:F2}"
-            );
+        //UnityEngine.Debug.Log(
+        //        $"Mesh Processing Ticks: {stopwatch.ElapsedTicks:F2}"
+        //    );
 
         meshDirty = false;
     }

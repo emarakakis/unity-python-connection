@@ -1,12 +1,13 @@
 import socket
 import time
 import math
+import time
 from pydantic import BaseModel
 
 HOST = "127.0.0.1"
 PORT = 5000
 
-GRID_DIMENSION = 128
+GRID_DIMENSION = 512
 
 
 class Point(BaseModel):
@@ -59,10 +60,12 @@ points = [
 
 
 while True:
+    # Give or take 30 frames per second
+    time.sleep(0.05)
     ChangePoints(points)
 
     frame = Frame(points=points)
 
     message = frame.model_dump_json() + "\n"
-
+    
     conn.sendall(message.encode("utf-8"))
