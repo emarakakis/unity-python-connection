@@ -1,79 +1,71 @@
+using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Rendering;
-using System.Diagnostics;
-
-[System.Serializable]
-public class PythonData
-{
-    public int i;
-    public int j;
-    public float x;
-    public float y;
-    public float z;
-}
-
-[System.Serializable]
-public class PythonFrame
-{
-    public PythonData[] points;
-}
 
 public class PythonReceiver : MonoBehaviour
 {
     private const int GridSize = 512;
+    private const int TotalPoints = GridSize * GridSize;
+
+    private const float Spacing = 0.01f;
+
+    // Each height is a 32-bit float = 4 bytes
+    private const int FrameSize = TotalPoints * sizeof(float);
 
     [SerializeField] private MeshFilter meshFilter;
 
     private TcpClient client;
-    private StreamReader reader;
-
-    private PythonData[][] points;
+    private NetworkStream stream;
 
     private Mesh mesh;
+
     private Vector3[] vertices;
     private int[] triangles;
 
-    private double totalProcessTime = 0;
-    private float processTimes = 0;
+    // Raw bytes received from Python
+    private readonly byte[] frameBuffer = new byte[FrameSize];
 
-    private bool meshDirty = false;
+    // Latest complete frame received from Python
+    private readonly float[] latestHeights = new float[TotalPoints];
+
+    // Frame currently used by Unity
+    private readonly float[] renderHeights = new float[TotalPoints];
+
+    private readonly object frameLock = new object();
+
+    private bool hasNewFrame = false;
+
 
     private async void Start()
     {
-        InitializePoints();
         InitializeMesh();
 
         client = new TcpClient();
 
-        await client.ConnectAsync("127.0.0.1", 5000);
+        await client.ConnectAsync(
+            "127.0.0.1",
+            5000
+        );
 
-        NetworkStream stream = client.GetStream();
-        reader = new StreamReader(stream);
+        stream = client.GetStream();
 
-        _ = ReceiveData();
+        _ = Task.Run(ReceiveData);
     }
 
-    private void InitializePoints()
-    {
-        points = new PythonData[GridSize][];
-
-        for (int i = 0; i < GridSize; i++)
-        {
-            points[i] = new PythonData[GridSize];
-        }
-    }
 
     private void InitializeMesh()
     {
         mesh = new Mesh();
 
-        // 256 * 256 = 65536 vertices, so UInt32 indices are required
-        mesh.indexFormat = IndexFormat.UInt32;
+        mesh.name = "Python Terrain";
 
-        vertices = new Vector3[GridSize * GridSize];
+        mesh.indexFormat = IndexFormat.UInt32;
+        mesh.MarkDynamic();
+
+        vertices = new Vector3[TotalPoints];
 
         for (int i = 0; i < GridSize; i++)
         {
@@ -81,11 +73,16 @@ public class PythonReceiver : MonoBehaviour
             {
                 int index = GetVertexIndex(i, j);
 
-                vertices[index] = Vector3.zero;
+                vertices[index] = new Vector3(
+                    i * Spacing,
+                    0f,
+                    j * Spacing
+                );
             }
         }
 
-        triangles = new int[(GridSize - 1) * (GridSize - 1) * 6];
+        triangles =
+            new int[(GridSize - 1) * (GridSize - 1) * 6];
 
         int triangleIndex = 0;
 
@@ -93,10 +90,18 @@ public class PythonReceiver : MonoBehaviour
         {
             for (int j = 0; j < GridSize - 1; j++)
             {
-                int bottomLeft = GetVertexIndex(i, j);
-                int bottomRight = GetVertexIndex(i, j + 1);
-                int topLeft = GetVertexIndex(i + 1, j);
-                int topRight = GetVertexIndex(i + 1, j + 1);
+                int bottomLeft =
+                    GetVertexIndex(i, j);
+
+                int bottomRight =
+                    GetVertexIndex(i, j + 1);
+
+                int topLeft =
+                    GetVertexIndex(i + 1, j);
+
+                int topRight =
+                    GetVertexIndex(i + 1, j + 1);
+
 
                 triangles[triangleIndex++] = bottomLeft;
                 triangles[triangleIndex++] = bottomRight;
@@ -117,69 +122,110 @@ public class PythonReceiver : MonoBehaviour
         meshFilter.mesh = mesh;
     }
 
+
     private async Task ReceiveData()
     {
-        while (client.Connected)
+        try
         {
-            string message = await reader.ReadLineAsync();
-
-            if (message == null)
-                break;
-
-            Stopwatch stopwatch = Stopwatch.StartNew();
-
-            PythonFrame frame =
-                JsonUtility.FromJson<PythonFrame>(message);
-
-            foreach (PythonData data in frame.points)
+            while (true)
             {
-                points[data.i][data.j] = data;
+                int received = 0;
 
-                int index = GetVertexIndex(data.i, data.j);
+                // TCP is a byte stream, so one ReadAsync call
+                // is not guaranteed to return the whole frame.
+                while (received < FrameSize)
+                {
+                    int bytesRead = await stream.ReadAsync(
+                        frameBuffer,
+                        received,
+                        FrameSize - received
+                    );
 
-                vertices[index] = new Vector3(
-                    data.x * 0.01f,
-                    data.y,
-                    data.z * 0.01f
-                );
+                    if (bytesRead == 0)
+                    {
+                        return;
+                    }
+
+                    received += bytesRead;
+                }
+
+                lock (frameLock)
+                {
+                    Buffer.BlockCopy(
+                        frameBuffer,
+                        0,
+                        latestHeights,
+                        0,
+                        FrameSize
+                    );
+
+                    hasNewFrame = true;
+                }
             }
-
-            stopwatch.Stop();
-
-            processTimes++;
-            totalProcessTime += stopwatch.Elapsed.TotalMilliseconds;
-
-            UnityEngine.Debug.Log(
-                $"Frame Average Time Processing: {totalProcessTime / processTimes:F2} ms"
-            );
-
-            meshDirty = true;
+        }
+        catch (IOException)
+        {
+            // Connection closed
+        }
+        catch (ObjectDisposedException)
+        {
+            // Connection closed while stopping the application
         }
     }
 
+
     private void Update()
     {
-        if (!meshDirty)
+        bool newFrameAvailable = false;
+
+        lock (frameLock)
+        {
+            if (hasNewFrame)
+            {
+                Buffer.BlockCopy(
+                    latestHeights,
+                    0,
+                    renderHeights,
+                    0,
+                    FrameSize
+                );
+
+                hasNewFrame = false;
+
+                newFrameAvailable = true;
+            }
+        }
+
+        if (!newFrameAvailable)
+        {
             return;
+        }
 
-        //Stopwatch stopwatch = Stopwatch.StartNew();
 
-        //mesh.vertices = vertices;
+        // X and Z never change.
+        // Only update the height of each vertex.
+        for (int index = 0; index < TotalPoints; index++)
+        {
+            vertices[index].y = renderHeights[index];
+        }
 
-        //mesh.RecalculateNormals();
-        //mesh.RecalculateBounds();
 
-        //stopwatch.Stop();
+        mesh.vertices = vertices;
 
-        //UnityEngine.Debug.Log(
-        //        $"Mesh Processing Ticks: {stopwatch.ElapsedTicks:F2}"
-        //    );
-
-        meshDirty = false;
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
     }
+
 
     private int GetVertexIndex(int i, int j)
     {
         return i * GridSize + j;
+    }
+
+
+    private void OnDestroy()
+    {
+        stream?.Close();
+        client?.Close();
     }
 }

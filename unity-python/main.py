@@ -1,40 +1,11 @@
 import socket
 import time
-import math
-import time
-from pydantic import BaseModel
+import numpy as np
 
 HOST = "127.0.0.1"
 PORT = 5000
 
-GRID_DIMENSION = 512
-
-
-class Point(BaseModel):
-    i: int
-    j: int
-    x: float
-    y: float
-    z: float
-
-
-class Frame(BaseModel):
-    points: list[Point]
-
-
-def ChangePoints(points):
-    current_time = time.time()
-
-    for point in points:
-        point.y = (
-            math.sin(
-                point.i * 0.08 +
-                point.j * 0.08 +
-                current_time * 2.0
-            )
-            * 0.2
-        )
-
+GRID_SIZE = 512
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((HOST, PORT))
@@ -43,29 +14,48 @@ server.listen()
 print("Waiting for Unity...")
 
 conn, addr = server.accept()
+
 print("Unity connected:", addr)
 
-
-points = [
-    Point(
-        i=i,
-        j=j,
-        x=i,
-        y=0,
-        z=j
-    )
-    for i in range(GRID_DIMENSION)
-    for j in range(GRID_DIMENSION)
-]
-
+i, j = np.meshgrid(
+    np.arange(GRID_SIZE),
+    np.arange(GRID_SIZE),
+    indexing="ij"
+)
 
 while True:
-    # Give or take 30 frames per second
-    time.sleep(0.05)
-    ChangePoints(points)
+    frame_start = time.perf_counter()
 
-    frame = Frame(points=points)
+    current_time = time.time()
 
-    message = frame.model_dump_json() + "\n"
-    
-    conn.sendall(message.encode("utf-8"))
+    calculation_start = time.perf_counter()
+
+    heights = np.sin(
+        i * 0.08 +
+        j * 0.08 +
+        current_time * 2.0
+    ).astype(np.float32) * 0.2
+
+    calculation_end = time.perf_counter()
+
+    conversion_start = time.perf_counter()
+
+    data = heights.tobytes()
+
+    conversion_end = time.perf_counter()
+
+    send_start = time.perf_counter()
+
+    conn.sendall(data)
+
+    send_end = time.perf_counter()
+
+    total_end = time.perf_counter()
+
+    print(
+        f"Size: {len(data) / 1024 / 1024:.2f} MiB | "
+        f"Calculate: {(calculation_end - calculation_start) * 1000:.2f} ms | "
+        f"ToBytes: {(conversion_end - conversion_start) * 1000:.2f} ms | "
+        f"Send: {(send_end - send_start) * 1000:.2f} ms | "
+        f"Total: {(total_end - frame_start) * 1000:.2f} ms"
+    )

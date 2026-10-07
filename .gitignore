@@ -79,7 +79,9 @@ Assets/TerrainScreenshots/
 Assets/TerrainScreenshots.meta
 
 # Python virtual environments
-venv/
-.venv/
-env/
-ENV/
+# Python virtual environments
+**/venv/
+**/.venv/
+**/env/
+**/.env/
+**/ENV/
