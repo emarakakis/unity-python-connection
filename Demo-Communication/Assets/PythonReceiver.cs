@@ -7,8 +7,9 @@ using UnityEngine.Rendering;
 
 public class PythonReceiver : MonoBehaviour
 {
-    private const int GridSize = 512;
-    private const int TotalPoints = GridSize * GridSize;
+    private const int GRID_ROWS = 360;
+    private const int GRID_COLS = 640;
+    private const int TotalPoints = GRID_ROWS * GRID_COLS;
 
     private const float Spacing = 0.01f;
 
@@ -67,9 +68,9 @@ public class PythonReceiver : MonoBehaviour
 
         vertices = new Vector3[TotalPoints];
 
-        for (int i = 0; i < GridSize; i++)
+        for (int i = 0; i < GRID_ROWS; i++)
         {
-            for (int j = 0; j < GridSize; j++)
+            for (int j = 0; j < GRID_COLS; j++)
             {
                 int index = GetVertexIndex(i, j);
 
@@ -82,13 +83,13 @@ public class PythonReceiver : MonoBehaviour
         }
 
         triangles =
-            new int[(GridSize - 1) * (GridSize - 1) * 6];
+            new int[(GRID_ROWS - 1) * (GRID_COLS- 1) * 6];
 
         int triangleIndex = 0;
 
-        for (int i = 0; i < GridSize - 1; i++)
+        for (int i = 0; i < GRID_ROWS - 1; i++)
         {
-            for (int j = 0; j < GridSize - 1; j++)
+            for (int j = 0; j < GRID_COLS - 1; j++)
             {
                 int bottomLeft =
                     GetVertexIndex(i, j);
@@ -219,7 +220,7 @@ public class PythonReceiver : MonoBehaviour
 
     private int GetVertexIndex(int i, int j)
     {
-        return i * GridSize + j;
+        return i * GRID_COLS + j;
     }
 
 
