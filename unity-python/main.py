@@ -2,17 +2,56 @@ import socket
 import time
 import numpy as np
 import pyrealsense2 as rs
-
+import json
+import struct
 
 HOST = "127.0.0.1"
 PORT = 5000
 
+#   Distance of camera to the floor
+FLOOR_DISTANCE = 1.66
+
+#   Distance of camera to the base of the SandCastle. Where sand is at 0
+BASE_DISTANCE = 1#1.13
+
+#   Average sand height if all sand in Sandcastle is flat
+AVERAGE_SAND_HEIGHT = 0.095
+AVERAGE_SAND_HEIGHT_TOTAL = BASE_DISTANCE + AVERAGE_SAND_HEIGHT
+
+#   Peripheral Glass height
+MAX_SAND_HEIGHT = 1#0.25
+
+#   Multiply height for better visualization
+HEIGHT_MULTIPLIER = 2.5
+
+#   SET ROI DIMENSIONS
+
+ROI_X_MIN = 70
+ROI_Y_MIN = 20
+
+ROI_X_MAX = 530
+ROI_Y_MAX = 320
+
+ROI_ROWS = ROI_Y_MAX - ROI_Y_MIN
+ROI_COLS = ROI_X_MAX - ROI_X_MIN
+#   Max and min values of the sand
+MIN_DEPTH = BASE_DISTANCE - MAX_SAND_HEIGHT
+MAX_DEPTH = BASE_DISTANCE
+
+#   Physical Box Dimensions
+PHYSICAL_BOX_DEPTH = 0.25
+PHYSICAL_BOX_WIDTH = 1.097
+PHYSICAL_BOX_LENGTH = 0.78
+PHYSICAL_BOX_VOLUME = PHYSICAL_BOX_DEPTH * PHYSICAL_BOX_WIDTH * PHYSICAL_BOX_LENGTH * 1000
+
+#   Dimensions to be used for the realsense depth.
 CAMERA_PIXELS_ROWS = 720
 CAMERA_PIXELS_COLS = 1280
 
-UNITY_GRID_ROWS = 360
-UNITY_GRID_COLS = 640
+DECIMATION_FACTOR = 2
 
+UNITY_GRID_ROWS = CAMERA_PIXELS_ROWS // DECIMATION_FACTOR
+UNITY_GRID_COLS = CAMERA_PIXELS_COLS // DECIMATION_FACTOR
 
 # --------------------------------------------------
 # TCP server
@@ -27,7 +66,6 @@ print("Waiting for Unity...")
 conn, addr = server.accept()
 
 print("Unity connected:", addr)
-
 
 # --------------------------------------------------
 # RealSense
@@ -50,7 +88,6 @@ depth_sensor = profile.get_device().first_depth_sensor()
 depth_scale = depth_sensor.get_depth_scale()
 
 print(f"Depth scale: {depth_scale}")
-
 
 # --------------------------------------------------
 # RealSense filters
@@ -119,9 +156,6 @@ temporal.set_option(
     
     
     D = 32 * f * B /Z
-    
-    
-    
 """
 temporal.set_option(
     rs.option.filter_smooth_delta,
@@ -153,6 +187,26 @@ hole_filling = rs.hole_filling_filter(1)
 # Main loop
 # --------------------------------------------------
 
+#   Send Setup information
+setup = {
+    "type": "setup",
+    "GRID_ROWS": ROI_ROWS,
+    "GRID_COLS": ROI_COLS,
+    "HEIGHT_MULTIPLIER": HEIGHT_MULTIPLIER
+}
+
+setup_bytes = json.dumps(setup).encode("utf-8")
+
+# Send JSON size first
+conn.sendall(
+    struct.pack("<I", len(setup_bytes))
+)
+
+# Send JSON
+conn.sendall(setup_bytes)
+
+print("Setup sent:", setup)
+
 try:
     while True:
         frame_start = time.perf_counter()
@@ -163,7 +217,6 @@ try:
 
         if not depth_frame:
             continue
-
 
         # ------------------------------------------
         # Filter pipeline
@@ -180,7 +233,6 @@ try:
 
         #   Change the value based on past heights
         filtered = temporal.process(filtered)
-
         filtered = disparity_to_depth.process(filtered)
 
         #   Fill the holes. Should never not have it enabled as lot of holes!
@@ -195,14 +247,19 @@ try:
             filtered.get_data()
         )
 
-        MAX_DEPTH = 1.0
-
+        
         #   Raw Depths are unsigned int (0-65535). Need to multiply with depth_scale for meters
         depths = raw_depth.astype(np.float32)
         depths *= np.float32(depth_scale)
+        
+        depths = depths[
+            ROI_Y_MIN:ROI_Y_MAX,
+            ROI_X_MIN:ROI_X_MAX
+        ]
+        
 
         valid_mask = (
-            (depths > 0.3) &
+            (depths >= MIN_DEPTH) &
             (depths <= MAX_DEPTH)
         )
 
@@ -212,7 +269,7 @@ try:
         )
 
         heights[valid_mask] = (
-            MAX_DEPTH - depths[valid_mask]
+            (MAX_DEPTH - depths[valid_mask]) * HEIGHT_MULTIPLIER
         )
 
 
@@ -221,19 +278,12 @@ try:
         # ------------------------------------------
 
         conversion_start = time.perf_counter()
-
         data = heights.tobytes(order="C")
-
         conversion_end = time.perf_counter()
-
         send_start = time.perf_counter()
-
         conn.sendall(data)
-
         send_end = time.perf_counter()
-
         total_end = time.perf_counter()
-
 
         print(
             f"Shape: {heights.shape} | "
@@ -242,7 +292,6 @@ try:
             f"Send: {(send_end - send_start) * 1000:.2f} ms | "
             f"Total: {(total_end - frame_start) * 1000:.2f} ms"
         )
-
 
 finally:
     pipeline.stop()
