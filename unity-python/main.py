@@ -58,7 +58,6 @@ try:
 
     while True:
         frame_start = time.perf_counter()
-
         depths = camera.get_depths()
 
         if depths is None:
