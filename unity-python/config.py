@@ -1,6 +1,7 @@
 
 from dataclasses import dataclass
 from typing import ClassVar
+import pyrealsense2 as rs
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,8 @@ class CameraConfig:
     PIXELS_ROWS: int = 720
     PIXELS_COLS: int = 1280
     FPS: int = 30
+    
+    FORMAT: rs.format = rs.format.z16
 
     DECIMATION_FACTOR: int = 2
 
